@@ -2,7 +2,6 @@
 import os
 import time
 import shlex
-import subprocess
 
 from lutris import settings
 from lutris.runners import wine
@@ -25,7 +24,7 @@ from lutris.runners.commands.wine import ( # noqa pylint: disable=unused-import
     install_cab_component,
 )
 
-STEAM_INSTALLER_URL = "http://lutris.net/files/runners/SteamInstall.msi"
+STEAM_INSTALLER_URL = "https://lutris.nyc3.cdn.digitaloceanspaces.com/runners/winesteam/SteamSetup.exe"
 
 
 def is_running():
@@ -276,17 +275,22 @@ class winesteam(wine.wine):
             return system.fix_path_case(registry.get_unix_path(steam_path))
 
     def install(self, version=None, downloader=None, callback=None):
-        installer_path = os.path.join(settings.TMP_PATH, "SteamInstall.msi")
+        installer_path = os.path.join(settings.TMP_PATH, "SteamSetup.exe")
 
         def on_steam_downloaded(*_args):
             prefix = self.get_or_create_default_prefix()
-            self.msi_exec(
+
+            # Install CJK fonts in the Steam prefix before Steam
+            winetricks(
+                "cjkfonts",
+                prefix=prefix,
+                wine_path=self.get_executable()
+            )
+            wineexec(
                 installer_path,
-                quiet=True,
+                args="/S",
                 prefix=prefix,
                 wine_path=self.get_executable(),
-                working_dir="/tmp",
-                blocking=True,
             )
             if callback:
                 callback()
@@ -377,14 +381,18 @@ class winesteam(wine.wine):
     def install_game(self, appid, generate_acf=False):
         if not appid:
             raise ValueError("Missing appid in winesteam.install_game")
-        command = self.launch_args + ["steam://install/%s" % appid]
-        subprocess.Popen(command, env=self.get_env())
+        system.execute(
+            self.launch_args + ["steam://install/%s" % appid],
+            env=self.get_env()
+        )
 
     def validate_game(self, appid):
         if not appid:
             raise ValueError("Missing appid in winesteam.validate_game")
-        command = self.launch_args + ["steam://validate/%s" % appid]
-        subprocess.Popen(command, env=self.get_env())
+        system.execute(
+            self.launch_args + ["steam://validate/%s" % appid],
+            env=self.get_env()
+        )
 
     def force_shutdown(self):
         """Forces a Steam shutdown, double checking its exit status and raising
